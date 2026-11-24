@@ -941,6 +941,13 @@ export interface AnthropicMessagesCompat {
 	supportsStrictTools?: boolean;
 	/** Whether the exact model transport supports effort-only system messages and thinking binding controls. Default: false. */
 	supportsMidConvoEffort?: boolean;
+	/**
+	 * Whether the exact model transport accepts `thinking.block_binding` and the
+	 * thinking-binding-controls-2026-08-01 beta without mid-conversation effort. When true, requests
+	 * with thinking enabled ask the server to drop replayed thinking blocks whose system prompt or
+	 * tools changed instead of rejecting the request. Implied by supportsMidConvoEffort. Default: false.
+	 */
+	supportsThinkingBlockBinding?: boolean;
 	/** Whether the exact model accepts system-role messages inside the conversation. When false, later system messages are folded into the top-level system prompt. Default: false. */
 	supportsMidConvoSystemMessages?: boolean;
 	/** Whether the exact model accepts mid-conversation `tool_addition` and `tool_removal` blocks. Requires `supportsMidConvoSystemMessages`. Default: false. */

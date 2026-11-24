@@ -167,6 +167,7 @@ const AnthropicMessagesCompatSchema = Type.Object({
 	allowEmptySignature: Type.Optional(Type.Boolean()),
 	supportsStrictTools: Type.Optional(Type.Boolean()),
 	supportsMidConvoEffort: Type.Optional(Type.Boolean()),
+	supportsThinkingBlockBinding: Type.Optional(Type.Boolean()),
 	allowedFallbackModels: Type.Optional(
 		Type.Array(
 			Type.Object({

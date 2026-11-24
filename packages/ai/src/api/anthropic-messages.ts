@@ -227,6 +227,7 @@ function getAnthropicCompat(model: Model<"anthropic-messages">) {
 		supportsStrictTools: model.compat?.supportsStrictTools ?? false,
 		supportsMidConvoSystemMessages: model.compat?.supportsMidConvoSystemMessages ?? false,
 		supportsMidConvoToolChanges: model.compat?.supportsMidConvoToolChanges ?? false,
+		supportsThinkingBlockBinding: model.compat?.supportsThinkingBlockBinding ?? false,
 	};
 }
 
@@ -1118,6 +1119,12 @@ function getBetaFeatures(
 	if (shouldUseServerSideFallbackBeta(model)) features.push(SERVER_SIDE_FALLBACK_BETA);
 	if (model.compat?.supportsMidConvoEffort === true) {
 		features.push(MID_CONVERSATION_OUTPUT_CONFIG_BETA, THINKING_BINDING_CONTROLS_BETA);
+	} else if (
+		model.compat?.supportsThinkingBlockBinding === true &&
+		model.reasoning &&
+		options?.thinkingEnabled === true
+	) {
+		features.push(THINKING_BINDING_CONTROLS_BETA);
 	}
 	if (nativeToolChanges) features.push(MID_CONVERSATION_TOOL_CHANGES_BETA);
 	return [...new Set(features)];
@@ -1253,9 +1260,16 @@ function buildParams(
 			// Default to "summarized" so Opus 4.7 and Mythos Preview behave like
 			// older Claude 4 models (whose API default is also "summarized").
 			const display: AnthropicThinkingDisplay = options.thinkingDisplay ?? "summarized";
+			// Replayed signed thinking blocks are bound to the system prompt and tools they were created
+			// with. After either changes (edited context files, added tools, compaction), every request
+			// would 400 with "The block is bound to a different conversation" unless stale blocks are
+			// dropped. Bedrock does the same for models that accept it.
+			const blockBinding = compat.supportsThinkingBlockBinding
+				? { block_binding: { prefix_mismatch_behavior: "drop_block" as const } }
+				: {};
 			if (model.compat?.forceAdaptiveThinking === true) {
 				// Adaptive thinking: Claude decides when and how much to think.
-				params.thinking = { type: "adaptive", display };
+				params.thinking = { type: "adaptive", display, ...blockBinding };
 				if (options.effort) {
 					params.output_config = { effort: options.effort };
 				}
@@ -1265,6 +1279,7 @@ function buildParams(
 					type: "enabled",
 					budget_tokens: options.thinkingBudgetTokens || 1024,
 					display,
+					...blockBinding,
 				};
 			}
 		} else if (options?.thinkingEnabled === false && model.thinkingLevelMap?.off !== null) {

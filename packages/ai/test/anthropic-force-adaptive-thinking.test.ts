@@ -3,9 +3,17 @@ import { getModel, streamSimple } from "../src/compat.ts";
 import type { Context, Model, SimpleStreamOptions } from "../src/types.ts";
 
 interface AnthropicThinkingPayload {
-	thinking?: { type: string; budget_tokens?: number; display?: string };
+	thinking?: {
+		type: string;
+		budget_tokens?: number;
+		display?: string;
+		block_binding?: { prefix_mismatch_behavior: string };
+	};
 	output_config?: { effort?: string };
+	betas?: string[];
 }
+
+const THINKING_BINDING_CONTROLS_BETA = "thinking-binding-controls-2026-08-01";
 
 class PayloadCaptured extends Error {
 	constructor() {
@@ -112,6 +120,48 @@ describe("Anthropic forceAdaptiveThinking compat override", () => {
 
 		expect(payload.thinking?.type).toBe("enabled");
 		expect(payload.output_config).toBeUndefined();
+	});
+
+	it("drops stale thinking blocks when compat.supportsThinkingBlockBinding is true", async () => {
+		const payload = await capturePayload(
+			makeCustomModel({ forceAdaptiveThinking: true, supportsThinkingBlockBinding: true }),
+			{ reasoning: "medium" },
+		);
+
+		expect(payload.thinking).toEqual({
+			type: "adaptive",
+			display: "summarized",
+			block_binding: { prefix_mismatch_behavior: "drop_block" },
+		});
+		// Effort stays top-level: binding controls do not imply mid-conversation effort.
+		expect(payload.output_config).toEqual({ effort: "medium" });
+		expect(payload.betas).toContain(THINKING_BINDING_CONTROLS_BETA);
+		expect(payload.betas).not.toContain("mid-conversation-output-config-2026-07-01");
+	});
+
+	it("adds block binding to budget-based thinking when supported", async () => {
+		const payload = await capturePayload(makeCustomModel({ supportsThinkingBlockBinding: true }), {
+			reasoning: "medium",
+		});
+
+		expect(payload.thinking?.type).toBe("enabled");
+		expect(payload.thinking?.block_binding).toEqual({ prefix_mismatch_behavior: "drop_block" });
+		expect(payload.betas).toContain(THINKING_BINDING_CONTROLS_BETA);
+	});
+
+	it("omits block binding and its beta without the compat flag or with thinking off", async () => {
+		const unsupported = await capturePayload(makeCustomModel({ forceAdaptiveThinking: true }), {
+			reasoning: "medium",
+		});
+		const off = await capturePayload(
+			makeCustomModel({ forceAdaptiveThinking: true, supportsThinkingBlockBinding: true }),
+		);
+
+		expect(unsupported.thinking?.block_binding).toBeUndefined();
+		expect(unsupported.betas ?? []).not.toContain(THINKING_BINDING_CONTROLS_BETA);
+		// Anthropic rejects block_binding with disabled thinking.
+		expect(off.thinking).toEqual({ type: "disabled" });
+		expect(off.betas ?? []).not.toContain(THINKING_BINDING_CONTROLS_BETA);
 	});
 
 	it("preserves thinking.type=disabled when reasoning is off regardless of override", async () => {
